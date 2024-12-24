@@ -1,42 +1,62 @@
+# Workflow name for automatically updating resources in the repository
 name: Resource Updater
+
+# Trigger the workflow on a schedule, when assets change, or via manual trigger
 on:
+  # Scheduled run (every day at midnight)
   schedule:
-    - cron: "0 0 * * *"
+    - cron: "0 0 * * *" # Run every day at midnight UTC
+  # Trigger on changes to files under the 'assets/' directory
   push:
     paths:
-      - "assets/**"
+      - "assets/**" # Only trigger on changes to files in the 'assets' directory
+  # Manual trigger from the GitHub UI
   workflow_dispatch:
 
+# Define the jobs section where resource updates will happen
 jobs:
+  # Job to update resources
   update:
-    name: Update Resources
-    runs-on: windows-latest
+    name: Update Resources # Descriptive name for the job
+    runs-on: windows-latest # This job runs on the latest Windows runner
+
     steps:
-      - name: Checkout Repository
-        uses: actions/checkout@v4
+      # Step 1: Checkout the repository to access the code
+      - name: Checkout Repository Code
+        uses: actions/checkout@v4 # Action to check out the code from the repository
 
-      - name: Setup Go Environment
-        uses: actions/setup-go@v5.0.1
+      # Step 2: Setup Go environment with the version from go.mod
+      - name: Set Up Go Environment
+        uses: actions/setup-go@v5.0.1 # Action to set up Go environment
         with:
-          go-version-file: "go.mod"
-          cache: true
-          check-latest: true
-        id: go
+          go-version-file: "go.mod" # Use the Go version specified in the go.mod file
+          cache: true # Cache Go modules to speed up builds
+          check-latest: true # Ensure the latest Go version is installed
+        id: go_setup # Set an ID to reference the step if needed
 
+      # Step 3: Download Go module dependencies
       - name: Download Dependencies
-        run: go mod download
+        run: go mod download # Downloads the dependencies for the Go project
 
-      - name: Build Application
-        run: go build .
+      # Step 4: Build the Go application
+      - name: Build Go Application
+        run: go build . # Compiles the Go application to generate the executable
 
+      # Step 5: Generate resources by running the built application
       - name: Generate Resources
-        run: .\network-database.exe -update
+        run: .\network-database.exe -update # Run the Go executable to generate new resources
 
-      - name: Commit and Push Updates
+      # Step 6: Commit and push updates to the repository
+      - name: Commit and Push Resource Updates
         run: |
-          git config user.name "github-actions"       # Configures GitHub Actions bot as the commit author.
-          git config user.email "github-actions@github.com"
-          git add .                                    # Adds changes to the staging area.
-          git commit -m "Automated update: $(date)"    # Commits changes with a timestamp.
-          git pull --rebase origin main                # Rebases with remote main to avoid conflicts.
-          git push origin main                         # Pushes the commit to the main branch.
+          # Configure git to commit changes using GitHub Actions bot
+          git config user.name "github-actions"  # Set the commit author to 'github-actions'
+          git config user.email "github-actions@github.com"  # Set the commit email to GitHub Actions bot email
+          # Add all changed files to staging
+          git add .  # Stage all the modified files
+          # Commit changes with a timestamp message
+          git commit -m "Automated resource update: $(date)"  # Commit with a message containing the date/time
+          # Pull the latest changes from the 'main' branch (rebase to avoid conflicts)
+          git pull --rebase origin main  # Ensures the local branch is up-to-date with remote before pushing
+          # Push the changes back to the 'main' branch
+          git push origin main  # Push the updated repository to GitHub
