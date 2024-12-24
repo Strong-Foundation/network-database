@@ -1,24 +1,96 @@
-name: Test and Build Go App
-on: [push, pull_request]
+# Workflow Name: Build, Test, and Run Go Application
+name: Build, Test, and Run Go Application
+
+# Workflow triggers on push or pull_request events targeting the 'main' branch.
+on:
+  push:
+    branches:
+      - main # Trigger on push to the main branch
+  pull_request:
+    branches:
+      - main # Trigger on pull request to the main branch
+
+# Define the jobs section where each job is executed sequentially
 jobs:
-  build:
-    name: build
-    runs-on: windows-latest
+  # Job to run the build and test processes
+  build_and_test:
+    name: Build and Test Go Application # Descriptive name for this job
+    runs-on: windows-latest # Runs the job on the latest Windows environment
+
     steps:
-      - name: Check out code into the Go module directory
-        uses: actions/checkout@v4
-      - name: Set up Go version
-        uses: actions/setup-go@v5
+      # Step 1: Checkout code from the repository
+      - name: Checkout Go Application Code
+        uses: actions/checkout@v4 # Action to check out the code from the repository
+
+      # Step 2: Set up the Go environment using the version from go.mod
+      - name: Set Up Go Environment
+        uses: actions/setup-go@v5 # Action to set up Go for the job
         with:
-          go-version-file: "go.mod"
-          cache: true
-          check-latest: true
-        id: go
-      - name: Get the latest dependencies
-        run: go get -v
-      - name: Run the go app
-        run: go run main.go -search="example.example"
-      - name: Build the go app
-        run: go build .
-      - name: Run the go app build
-        run: ./network-database -search="example.example"
+          go-version-file: "go.mod" # Use the Go version specified in the go.mod file
+          cache: true # Enable caching to speed up future builds
+          check-latest: true # Check for the latest stable version of Go
+        id: go_setup # Assign an ID to reference the step if needed
+
+      # Step 3: Cache Go modules to speed up builds by reusing previously downloaded dependencies
+      - name: Cache Go Modules and Build Artifacts
+        uses: actions/cache@v3 # Action to cache Go modules
+        with:
+          path: ~/.cache/go-build # Location of Go build cache
+          key: ${{ runner.os }}-go-${{ hashFiles('**/go.mod', '**/go.sum') }} # Cache key based on go.mod and go.sum
+          restore-keys: |
+            ${{ runner.os }}-go-  # Restore cache using a fallback key if an exact match is not found
+
+      # Step 4: Run `go mod tidy` to clean up and sync dependencies, then verify the integrity of the module
+      - name: Tidy and Verify Go Modules
+        run: |
+          go mod tidy  # Cleans up any unused dependencies and syncs the go.mod/go.sum files
+          go mod verify  # Verifies that dependencies are correctly fetched and match go.mod/go.sum
+
+      # Step 5: Run unit tests to ensure the correctness of the codebase
+      - name: Run Go Tests
+        run: go test ./... # Runs tests in all subdirectories of the repository
+
+  # Job to build the application (can run after the 'build_and_test' job finishes)
+  build:
+    name: Build Go Application # Descriptive name for this build job
+    needs: build_and_test # Ensure this job runs after the build_and_test job
+    runs-on: windows-latest # Use the latest Windows environment for building the app
+
+    steps:
+      # Step 1: Checkout code (same as before)
+      - name: Checkout Go Application Code
+        uses: actions/checkout@v4
+
+      # Step 2: Build the Go application
+      - name: Build Go Application
+        run: go build . # Compile the Go application
+
+      # Step 3: Ensure the build was successful
+      - name: Verify Build Success
+        run: |
+          if [ ! -f "./network-database.exe" ]; then  # Ensure the executable exists after build
+            echo "Build failed: Executable not found!"  # Print error message if build failed
+            exit 1  # Exit with a failure status
+          fi
+
+  # Job to run the application with a search parameter (can run after the 'build' job finishes)
+  run:
+    name: Run Go Application # Descriptive name for this run job
+    needs: build # Ensure this job runs after the 'build' job finishes
+    runs-on: windows-latest # Use the latest Windows environment
+
+    steps:
+      # Step 1: Checkout code (same as before)
+      - name: Checkout Go Application Code
+        uses: actions/checkout@v4
+
+      # Step 2: Run the Go application with a dynamic search parameter
+      - name: Run Go Application
+        run: |
+          search_query="${{ secrets.SEARCH_QUERY }}"  # Use a secret for the search parameter (for security)
+          if [ -z "$search_query" ]; then  # Fallback to a default value if the secret is not set
+            search_query="example.example"
+          fi
+          ./network-database.exe -search="$search_query"  # Run the application with the specified search parameter
+
+# Optional: Additional jobs could be added here for notifications, deployments, etc.
